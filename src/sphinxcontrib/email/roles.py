@@ -1,4 +1,3 @@
-import re
 from typing import List, Tuple
 
 import sphinx.util
@@ -6,9 +5,11 @@ from docutils import nodes
 from docutils.nodes import Node, system_message
 from sphinx.util.docutils import SphinxRole
 
-from .utils import Obfuscator
-
 logger = sphinx.util.logging.getLogger(__name__)
+
+
+class EmailNode(nodes.reference):
+    pass
 
 
 class EmailRole(SphinxRole):
@@ -19,16 +20,12 @@ class EmailRole(SphinxRole):
         "name@domain.org"
         "Name Surname <name@domain.org>"
         """
-        pattern = (
-            r"^(?:(?P<name>.*?)\s*<)?(?P<email>\b[-.\w]+@[-.\w]+\.[a-z]{2,4}\b)>?$"
-        )
-        match = re.search(pattern, self.text)
-        if not match:
-            return [], []
-        data = match.groupdict()
 
-        obfuscated = Obfuscator().js_obfuscated_mailto(
-            email=data["email"], displayname=data["name"]
+        node = EmailNode(
+            self.rawtext,
+            self.text,
+            refuri=f"mailto:{self.text}",
+            raw_uri=self.text,
         )
-        node = nodes.raw("", obfuscated, format="html")
+
         return [node], []

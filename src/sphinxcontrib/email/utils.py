@@ -4,6 +4,8 @@ import xml.sax.saxutils  # nosec
 from xml.etree import ElementTree as ET  # nosec  # noqa DUO107
 
 import sphinx.util
+from docutils import nodes
+from sphinx.writers.html import HTMLTranslator
 
 logger = sphinx.util.logging.getLogger(__name__)
 
@@ -55,11 +57,35 @@ class Obfuscator:
 
         return self.xml_to_unesc_string(xml_node)
 
-    def js_obfuscated_mailto(self, email: str, displayname: str = None) -> str:
-        """ROT 13 encryption within an Anchor tag w/ a mailto: attribute"""
-        xml_node = ET.Element("a")
-        xml_node.attrib["class"] = "reference external"
-        xml_node.attrib["href"] = f"mailto:{email}"
-        xml_node.text = displayname or email
 
-        return self.js_obfuscated_text(self.xml_to_unesc_string(xml_node))
+def visit_email_node(translator: HTMLTranslator, node: nodes.reference) -> None:
+
+    pattern = r"^(?:(?P<name>.*?)\s*<)?(?P<email>\b[-.\w]+@[-.\w]+\.[a-z]{2,4}\b)>?$"
+
+    match = re.search(pattern, node["raw_uri"])
+    if not match:
+        return translator.visit_reference(node)
+
+    data = match.groupdict()
+
+    if not node.get("refuri"):
+        raise ValueError('"email_node" must have a "refuri" attribute.')
+
+    email = data["email"]
+    displayname = data["name"] or email
+
+    atts = {
+        "class": "reference external",
+        "href": node["refuri"],
+    }
+
+    starttag = translator.starttag(node, "a", "", **atts)
+    obfuscated = Obfuscator().js_obfuscated_text(f"{starttag}{displayname}</a>")
+    translator.body.append(obfuscated)
+
+    raise nodes.SkipNode
+
+
+def depart_email_node(translator: HTMLTranslator, node: nodes.reference):
+    if not isinstance(node.parent, nodes.TextElement):
+        translator.body.append("\n")
